@@ -33,6 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+# .env.production holder KUN offentlige NEXT_PUBLIC-nøgler (Supabase anon-key er
+# designet til at ligge i browser-bundlen og er beskyttet af RLS) — committes med vilje
+# så Vercel-builds har config uden manuel opsætning.
+!.env.production
 
 # vercel
 .vercel
