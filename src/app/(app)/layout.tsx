@@ -2,6 +2,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { MobileNav } from "@/components/MobileNav";
 import { AuthGate } from "@/components/AuthGate";
+import { Rundvisning } from "@/components/Rundvisning";
 
 export default function AppLayout({
   children,
@@ -19,6 +20,7 @@ export default function AppLayout({
           </main>
           <MobileNav />
         </div>
+        <Rundvisning />
       </div>
     </AuthGate>
   );

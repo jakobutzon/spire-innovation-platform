@@ -43,6 +43,7 @@ export default function LeaderboardPage() {
       />
 
       {/* Podie */}
+      <div data-tour="leaderboard">
       <Card className="mb-6 overflow-hidden">
         <div className="bg-gradient-to-br from-brand-600 to-accent-600 px-6 pt-6">
           <div className="flex items-end justify-center gap-3 sm:gap-6">
@@ -79,6 +80,7 @@ export default function LeaderboardPage() {
           </div>
         </div>
       </Card>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Fuld rangliste */}

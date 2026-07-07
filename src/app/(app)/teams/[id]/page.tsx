@@ -97,7 +97,7 @@ export default function ProjektDetaljePage() {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+      <div data-tour="eksekvering" className="mt-6 grid gap-4 lg:grid-cols-2">
         {/* Opgaveliste (to-do) */}
         <Card>
           <CardBody>

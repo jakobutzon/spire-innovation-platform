@@ -43,7 +43,9 @@ export function Topbar() {
             <p className="text-xs text-muted">{currentUser.titel}</p>
           </div>
         </Link>
-        <NiveauBar className="hidden sm:flex" />
+        <div data-tour="niveau" className="hidden sm:block">
+          <NiveauBar />
+        </div>
       </div>
     </header>
   );

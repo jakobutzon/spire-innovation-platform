@@ -42,7 +42,10 @@ export default function DelDinMeningPage() {
   return (
     <div className="animate-fade-in space-y-7">
       {/* Hero — opfordrer til at dele en idé */}
-      <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-brand-600 via-brand-600 to-accent-600 px-6 py-7 text-white sm:px-8">
+      <div
+        data-tour="del-ide"
+        className="overflow-hidden rounded-3xl bg-gradient-to-br from-brand-600 via-brand-600 to-accent-600 px-6 py-7 text-white sm:px-8"
+      >
         <p className="text-sm text-white/80">
           {hilsen()}, {currentUser.navn.split(" ")[0]} 👋
         </p>
@@ -70,7 +73,10 @@ export default function DelDinMeningPage() {
 
       {/* Beslutnings-kø */}
       <div>
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+        <div
+          data-tour="stemme-ko"
+          className="mb-4 flex flex-wrap items-end justify-between gap-2"
+        >
           <div>
             <h2 className="text-lg font-semibold">Tag stilling til dine kollegers idéer</h2>
             <p className="text-sm text-muted">

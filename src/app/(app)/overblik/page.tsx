@@ -97,7 +97,10 @@ export default function OverblikPage() {
 
       {/* Idéer til beslutning */}
       <div id="beslutninger" className="scroll-mt-24">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div
+          data-tour="beslutning"
+          className="mb-4 flex flex-wrap items-center justify-between gap-2"
+        >
           <div className="flex items-center gap-2.5">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 text-white shadow-sm">
               <Inbox size={17} />

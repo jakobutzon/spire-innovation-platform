@@ -30,7 +30,7 @@ export function RoleSwitcher() {
   const aktiv = ROLLER.find((r) => r.id === rolle)!;
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative" ref={ref} data-tour="rolleskift">
       <button
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50"

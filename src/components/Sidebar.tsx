@@ -7,12 +7,14 @@ import {
   Lightbulb,
   LayoutDashboard,
   MessageSquareHeart,
+  Play,
   Settings,
   Trophy,
   User,
   Users,
   Sprout,
 } from "lucide-react";
+import { RUNDVISNING_EVENT } from "@/components/Rundvisning";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -77,6 +79,12 @@ export function Sidebar() {
         <p className="mt-1 text-xs text-white/80">
           Spire samler hele innovationsrejsen ét sted — struktureret, skalerbar og målbar.
         </p>
+        <button
+          onClick={() => window.dispatchEvent(new Event(RUNDVISNING_EVENT))}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-white/25"
+        >
+          <Play size={12} /> Se rundvisningen
+        </button>
       </div>
     </aside>
   );

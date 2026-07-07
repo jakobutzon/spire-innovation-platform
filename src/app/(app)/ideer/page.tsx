@@ -66,7 +66,10 @@ export default function IdeerPage() {
         }
       />
 
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div
+        data-tour="kategori-filtre"
+        className="mb-5 flex flex-wrap items-center justify-between gap-3"
+      >
         <div className="flex flex-wrap gap-1.5">
           {filtre.map((f) => (
             <button

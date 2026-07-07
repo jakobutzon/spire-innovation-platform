@@ -113,6 +113,7 @@ export default function TeamsPage() {
 
       {/* Board */}
       <div
+        data-tour="board"
         className="grid gap-4"
         style={{
           gridTemplateColumns: `repeat(${Math.max(stadier.length, 1)}, minmax(0, 1fr))`,
