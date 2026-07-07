@@ -28,21 +28,19 @@ export const KATEGORI_PALETTE: string[] = [
 ];
 
 /**
- * Alle farver lederen kan vælge mellem til en kategori.
- * Rødt og grønt er bevidst udeladt — de er reserveret til
- * succesfuld/ikke-succesfuld-signalet på projekter.
+ * Alle farver lederen kan vælge mellem til en kategori. Bevidst kun 8 og
+ * spredt ud over farvehjulet, så de er tydeligt forskellige fra hinanden
+ * (ikke flere næsten-ens blå/lilla-toner som tidligere). Rødt og grønt er
+ * udeladt — de er reserveret til succesfuld/ikke-succesfuld-signalet på
+ * projekter.
  */
 export const KATEGORI_FARVER: string[] = [
-  "bg-brand-100 text-brand-700",
-  "bg-amber-100 text-amber-700",
-  "bg-violet-100 text-violet-700",
-  "bg-sky-100 text-sky-700",
-  "bg-fuchsia-100 text-fuchsia-700",
-  "bg-cyan-100 text-cyan-700",
-  "bg-orange-100 text-orange-700",
-  "bg-indigo-100 text-indigo-700",
-  "bg-purple-100 text-purple-700",
-  "bg-yellow-100 text-yellow-700",
   "bg-blue-100 text-blue-700",
+  "bg-brand-100 text-brand-700",
+  "bg-violet-100 text-violet-700",
+  "bg-fuchsia-100 text-fuchsia-700",
+  "bg-amber-100 text-amber-700",
+  "bg-orange-100 text-orange-700",
+  "bg-cyan-100 text-cyan-700",
   "bg-slate-100 text-slate-600",
 ];

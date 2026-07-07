@@ -45,3 +45,12 @@ export function initialer(navn: string): string {
     .join("")
     .toUpperCase();
 }
+
+/** Tidspunkt-baseret hilsen på dansk, fx "God formiddag". */
+export function hilsen(): string {
+  const t = new Date().getHours();
+  if (t < 10) return "Godmorgen";
+  if (t < 14) return "God formiddag";
+  if (t < 18) return "God eftermiddag";
+  return "God aften";
+}

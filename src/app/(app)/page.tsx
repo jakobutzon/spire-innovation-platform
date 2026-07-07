@@ -15,6 +15,7 @@ import { NyIdeModal } from "@/components/NyIdeModal";
 import { kanStyre, useStore } from "@/lib/store";
 import { erAaben } from "@/lib/data";
 import { getUser } from "@/lib/data/users";
+import { hilsen } from "@/lib/utils";
 
 export default function DelDinMeningPage() {
   const { currentUser, rolle, ideas, erBesluttet } = useStore();
@@ -154,12 +155,4 @@ export default function DelDinMeningPage() {
       <NyIdeModal open={modal} onClose={() => setModal(false)} />
     </div>
   );
-}
-
-function hilsen(): string {
-  const t = new Date().getHours();
-  if (t < 10) return "Godmorgen";
-  if (t < 14) return "God formiddag";
-  if (t < 18) return "God eftermiddag";
-  return "God aften";
 }

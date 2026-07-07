@@ -21,18 +21,20 @@ interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** Sidens primære indgang — får en stærkere ikon-farve + svag animation, så den skiller sig ud. */
+  fremhaevet?: boolean;
 }
 
 // Kun for ledere — de træffer beslutninger frem for at dele meninger.
 const LEDER_NAV: NavItem[] = [
-  { href: "/overblik", label: "Overblik", icon: LayoutDashboard },
+  { href: "/overblik", label: "Overblik", icon: LayoutDashboard, fremhaevet: true },
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/indstillinger", label: "Indstillinger", icon: Settings },
 ];
 
 // For alle — her deler man og bidrager.
 const FAELLES_NAV: NavItem[] = [
-  { href: "/", label: "Del din mening", icon: MessageSquareHeart },
+  { href: "/", label: "Del din mening", icon: MessageSquareHeart, fremhaevet: true },
   { href: "/ideer", label: "Idéer", icon: Lightbulb },
   { href: "/teams", label: "Projekter", icon: Users },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
@@ -92,7 +94,16 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
         aktiv ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-50",
       )}
     >
-      <Icon size={18} className={aktiv ? "text-brand-600" : "text-slate-400"} />
+      <Icon
+        size={18}
+        className={cn(
+          aktiv
+            ? "text-brand-600"
+            : item.fremhaevet
+              ? "animate-pulse text-accent-500 [animation-duration:2.4s] motion-reduce:animate-none"
+              : "text-slate-400",
+        )}
+      />
       {item.label}
     </Link>
   );

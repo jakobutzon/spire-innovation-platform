@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowBigUp,
+  ArrowRight,
   Check,
   Inbox,
   Lightbulb,
@@ -25,6 +26,7 @@ import { kanStyre, useStore } from "@/lib/store";
 import { getUser, users } from "@/lib/data/users";
 import { erAaben } from "@/lib/data";
 import { niveauAf } from "@/lib/niveau";
+import { hilsen } from "@/lib/utils";
 
 export default function OverblikPage() {
   const { rolle, ideas, sendTilProjekt, currentUser, visErfaring } =
@@ -65,13 +67,36 @@ export default function OverblikPage() {
 
   return (
     <div className="animate-fade-in space-y-8">
-      <SectionHeader
-        titel="Overblik"
-        beskrivelse="Din vigtigste rolle: tag den afgørende beslutning på kollegernes idéer. Send de bedste videre til et projekt, eller afvis dem — så holder du idéstrømmen skarp."
-      />
+      {/* Leder-velkomst — bevidst en anden farve end "Del din mening"-hero'en, så de to sider kan skelnes visuelt */}
+      <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-800 via-indigo-900 to-indigo-950 px-6 py-7 text-white sm:px-8">
+        <p className="text-sm text-white/70">
+          {hilsen()}, {currentUser.navn.split(" ")[0]} 👋
+        </p>
+        <h1 className="mt-1 max-w-2xl text-2xl font-semibold tracking-tight sm:text-3xl">
+          {tilBeslutning.length > 0
+            ? `${tilBeslutning.length} idé${tilBeslutning.length === 1 ? "" : "er"} venter på din beslutning`
+            : "Din indbakke er tom lige nu — flot arbejde"}
+        </h1>
+        <p className="mt-2 max-w-xl text-white/70">
+          Send de bedste idéer videre til et projekt, eller afvis dem med en
+          begrundelse — så holder du idéstrømmen skarp for hele organisationen.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <a href="#beslutninger">
+            <Button className="bg-white text-indigo-900 hover:bg-white/90">
+              <Inbox size={16} /> Gå til beslutninger
+            </Button>
+          </a>
+          <Link href="/dashboard">
+            <Button variant="ghost" className="text-white hover:bg-white/10">
+              Se Dashboard <ArrowRight size={16} />
+            </Button>
+          </Link>
+        </div>
+      </div>
 
       {/* Idéer til beslutning */}
-      <div>
+      <div id="beslutninger" className="scroll-mt-24">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 text-white shadow-sm">

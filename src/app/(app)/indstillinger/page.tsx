@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
+  Check,
   ChevronDown,
   ChevronUp,
   Columns3,
@@ -20,6 +21,7 @@ import {
   Pill,
   SectionHeader,
 } from "@/components/ui";
+import { Modal } from "@/components/ui/Modal";
 import { kanStyre, useStore } from "@/lib/store";
 import { ANDET_ID, KATEGORI_FARVER } from "@/lib/data/kategorier";
 import { cn } from "@/lib/utils";
@@ -94,6 +96,7 @@ function KategoriAdminSektion() {
               <div key={k.id} className="flex items-center gap-3">
                 <FarveVaelger
                   valgt={k.chipFarve}
+                  navn={k.navn}
                   onVaelg={(farve) => saetKategoriFarve(k.id, farve)}
                 />
                 <input
@@ -281,60 +284,63 @@ function OpNedKnapper({
   );
 }
 
-/** Klikbar farveprik der åbner en lille palet til at vælge kategoriens farve. */
+/**
+ * Klikbar farveprik der åbner en modal med farvevalget. Hver mulighed vises
+ * som en levende forhåndsvisning af selve kategori-chippen (ikke en abstrakt
+ * farveprik), så det er tydeligt hvordan valget kommer til at se ud.
+ */
 function FarveVaelger({
   valgt,
+  navn,
   onVaelg,
 }: {
   valgt: string;
+  navn: string;
   onVaelg: (farve: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
 
   return (
-    <div className="relative shrink-0" ref={ref}>
+    <>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(true)}
         className={cn(
-          "h-5 w-5 rounded-full ring-1 ring-slate-300 transition hover:ring-slate-400",
+          "h-5 w-5 shrink-0 rounded-full ring-1 ring-slate-300 transition hover:scale-110 hover:ring-slate-400",
           valgt,
         )}
-        aria-label="Vælg kategori-farve"
+        aria-label={`Vælg farve til ${navn}`}
         title="Vælg farve"
       />
-      {open && (
-        <div className="absolute left-0 top-7 z-40 grid grid-cols-6 gap-1.5 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
-          {KATEGORI_FARVER.map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => {
-                onVaelg(f);
-                setOpen(false);
-              }}
-              className={cn(
-                "h-6 w-6 rounded-full ring-1 ring-slate-200 transition hover:scale-110",
-                f,
-                valgt === f && "ring-2 ring-brand-500 ring-offset-1",
-              )}
-              aria-label={`Vælg farve ${f}`}
-            />
-          ))}
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        titel={`Vælg farve — ${navn}`}
+      >
+        <div className="grid grid-cols-2 gap-2">
+          {KATEGORI_FARVER.map((f) => {
+            const erValgt = f === valgt;
+            return (
+              <button
+                key={f}
+                type="button"
+                onClick={() => {
+                  onVaelg(f);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-sm font-medium ring-2 transition hover:brightness-95",
+                  f,
+                  erValgt ? "ring-brand-500" : "ring-transparent",
+                )}
+              >
+                {navn}
+                {erValgt && <Check size={16} className="shrink-0" />}
+              </button>
+            );
+          })}
         </div>
-      )}
-    </div>
+      </Modal>
+    </>
   );
 }
