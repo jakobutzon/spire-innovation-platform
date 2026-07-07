@@ -115,7 +115,7 @@ export default function IdeerPage() {
               tekst="Prøv et andet filter, eller vær den første til at indsende en idé."
             />
           ) : (
-            <div className="space-y-4">
+            <div data-tour="ide-liste" className="space-y-4">
               {vist.map((idea) => (
                 <IdeaCard key={idea.id} idea={idea} />
               ))}

@@ -219,7 +219,10 @@ export default function IdeDetaljePage() {
               )}
 
               {!afvist && !redigererIde && (
-                <div className="mt-5 border-t border-slate-100 pt-4">
+                <div
+                  data-tour="ide-stemmer"
+                  className="mt-5 border-t border-slate-100 pt-4"
+                >
                   <p className="mb-2 text-sm text-muted">
                     Hvad synes du om idéen?
                   </p>

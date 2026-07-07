@@ -1,32 +1,53 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { ArrowRight, Check, MousePointerClick, X } from "lucide-react";
 import { Button } from "@/components/ui";
 import { useStore } from "@/lib/store";
 import { useAuth } from "@/components/AuthProvider";
-import type { Rolle } from "@/lib/types";
+import type { Idea, Project, Rolle, User } from "@/lib/types";
 
 const RUNDVISNING_KEY = "spire.rundvisning";
 /** Dispatch `window.dispatchEvent(new Event(RUNDVISNING_EVENT))` for at (gen)starte. */
 export const RUNDVISNING_EVENT = "spire:rundvisning";
 
+/** Øjebliksbillede af app-tilstanden — bruges til at opdage, at brugeren har udført handlingen. */
+interface Snapshot {
+  antalIdeer: number;
+  antalAfviste: number;
+  antalBesluttedeAndres: number;
+  antalMineKommentarer: number;
+  antalProjekter: number;
+  projektStatus?: string;
+  antalOpgaver: number;
+  antalProjektKommentarer: number;
+}
+
+interface Udfyldning {
+  selector: string;
+  value: string;
+}
+
 interface Trin {
-  rute: string;
-  /** Rollen trinnet kræver — rundvisningen skifter selv. */
-  rolle: Rolle;
-  /** Matcher et element med data-tour="…" der fremhæves. */
-  target: string;
+  /** Skift demo-rolle når trinnet starter. */
+  rolle?: Rolle;
+  /** Navigér automatisk når trinnet starter (bruges kun ved fase-skift). */
+  rute?: () => string;
+  /** Elementet der fremhæves med spotlight. */
+  find: () => HTMLElement | null;
   titel: string;
   tekst: string;
+  /** Felter der udfyldes med eksempeltekst, så brugeren kun skal klikke. */
+  udfyld?: Udfyldning[];
+  /** Handlingen er udført → gå automatisk videre. */
+  naarKlar?: (nu: Snapshot, foer: Snapshot, pathname: string) => boolean;
+  /** Kør når trinnet fuldføres (fx husk id på den nye idé/projekt). */
+  vedFuldfoert?: () => void;
+  /** Rent forklaringstrin — vis en knap i stedet for at vente på en handling. */
+  manuel?: boolean;
+  knap?: string;
 }
 
 interface Rect {
@@ -36,117 +57,332 @@ interface Rect {
   height: number;
 }
 
+const dataTour = (navn: string) => () =>
+  document.querySelector<HTMLElement>(`[data-tour="${navn}"]`);
+
+const findKnap = (tekst: string) => () =>
+  ([...document.querySelectorAll<HTMLElement>("button")].find((b) =>
+    b.textContent?.trim().includes(tekst),
+  ) ?? null);
+
+/** Udfyld et React-kontrolleret input/textarea programmatisk. */
+function udfyldFelt(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const proto =
+    el instanceof HTMLTextAreaElement
+      ? window.HTMLTextAreaElement.prototype
+      : window.HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+  if (!setter) return;
+  setter.call(el, value);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 /**
- * Guidet rundvisning gennem hele kerneflowet. Starter automatisk første gang
- * man udforsker som gæst, og kan genstartes via RUNDVISNING_EVENT (knappen i
- * sidemenuen). Skifter selv side og demo-rolle undervejs, og fremhæver det
- * relevante element med en blød ring — bevidst uden mørkt bagtæppe.
+ * Hands-on onboarding for gæste-/demo-brugere: mørkt bagtæppe med et
+ * "spotlight-hul" over det element, brugeren skal bruge — og fremdrift sker
+ * ved at brugeren faktisk UDFØRER handlingerne (indsend idé, stem, kommentér,
+ * afvis/send til projekt som leder, eksekvér projektet). Eksempeltekster
+ * udfyldes automatisk, så man kun skal klikke.
  */
 export function Rundvisning() {
   const router = useRouter();
+  const pathname = usePathname();
   const { gaest } = useAuth();
-  const { rolle, saetRolle, projects } = useStore();
+  const store = useStore();
+  const { rolle, saetRolle } = store;
 
   const [mounted, setMounted] = useState(false);
   const [aktiv, setAktiv] = useState(false);
   const [trin, setTrin] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
 
+  // Levende referencer, så trin-definitioner og intervaller altid ser nyeste tilstand.
+  const ideasRef = useRef<Idea[]>(store.ideas);
+  const projectsRef = useRef<Project[]>(store.projects);
+  const brugerRef = useRef<User>(store.currentUser);
   const rolleRef = useRef(rolle);
+  const pathnameRef = useRef(pathname);
   useEffect(() => {
+    ideasRef.current = store.ideas;
+    projectsRef.current = store.projects;
+    brugerRef.current = store.currentUser;
     rolleRef.current = rolle;
-  }, [rolle]);
+    pathnameRef.current = pathname;
+  });
+
+  const nyIdeIdRef = useRef<string | null>(null);
+  const nyProjektIdRef = useRef<string | null>(null);
+  /** Status det nye projekt blev født med — trin 17 er klaret, når den er ændret. */
+  const projektStartStatusRef = useRef<string | null>(null);
+  /** Tal ved tour-START — gør fuldførelses-tjek robuste, selv hvis brugeren er hurtigere end trin-skiftet. */
+  const startFoerRef = useRef({ antalIdeer: 0, antalAfviste: 0, antalProjekter: 0 });
 
   useEffect(() => setMounted(true), []);
 
-  const trinListe = useMemo<Trin[]>(() => {
-    const foersteProjektId = projects[0]?.id;
-    return [
-      {
-        rute: "/",
-        rolle: "medarbejder",
-        target: "del-ide",
-        titel: "Velkommen til Spire 👋",
-        tekst:
-          "Det hele starter her: del din idé med hele organisationen via »Indsend en idé«. Dit navn følger idéen hele vejen — fra forslag til færdigt projekt.",
+  const lavSnapshot = useCallback((): Snapshot => {
+    const uid = brugerRef.current.id;
+    const ideas = ideasRef.current;
+    const projekt = projectsRef.current.find(
+      (p) => p.id === nyProjektIdRef.current,
+    );
+    return {
+      antalIdeer: ideas.length,
+      antalAfviste: ideas.filter((i) => i.status === "afvist").length,
+      antalBesluttedeAndres: ideas.filter(
+        (i) =>
+          i.forfatterId !== uid &&
+          (i.stemtAf.includes(uid) || i.sprungetOver.includes(uid)),
+      ).length,
+      antalMineKommentarer: ideas.reduce(
+        (sum, i) =>
+          sum + i.kommentarer.filter((k) => k.forfatterId === uid).length,
+        0,
+      ),
+      antalProjekter: projectsRef.current.length,
+      projektStatus: projekt?.status,
+      antalOpgaver: projekt?.opgaver.length ?? 0,
+      antalProjektKommentarer: projekt?.kommentarer.length ?? 0,
+    };
+  }, []);
+
+  // Trin-definitionerne læser kun refs, så listen kan ligge i en stabil ref.
+  const trinListe = useRef<Trin[]>([
+    // ---------- FASE 1: Din første idé ----------
+    {
+      rolle: "medarbejder",
+      rute: () => "/",
+      find: () =>
+        document.querySelector<HTMLElement>('[data-tour="del-ide"] button'),
+      titel: "Velkommen til Spire 👋",
+      tekst:
+        "Det hele starter med en idé. Prøv selv: klik på »Indsend en idé«.",
+      naarKlar: () =>
+        !!document.querySelector(
+          'input[placeholder="Giv din idé en fængende titel"]',
+        ),
+    },
+    {
+      find: () => document.querySelector<HTMLElement>(".max-w-lg"),
+      titel: "Din første idé",
+      tekst:
+        "Vi har udfyldt et eksempel for dig — du skal bare trykke »Indsend idé«.",
+      udfyld: [
+        {
+          selector: 'input[placeholder="Giv din idé en fængende titel"]',
+          value: "Månedlig demo-dag på tværs af teams",
+        },
+        {
+          selector:
+            'textarea[placeholder="Hvilket problem løser idéen, og hvad er gevinsten?"]',
+          value:
+            "Én fredag om måneden viser hvert team, hvad de arbejder på. Det skaber videndeling, sparring på tværs og nye idéer — helt uden slides.",
+        },
+      ],
+      naarKlar: (nu) => nu.antalIdeer > startFoerRef.current.antalIdeer,
+      vedFuldfoert: () => {
+        nyIdeIdRef.current = ideasRef.current[0]?.id ?? null;
       },
-      {
-        rute: "/",
-        rolle: "medarbejder",
-        target: "stemme-ko",
-        titel: "Stem på kollegernes idéer",
-        tekst:
-          "Upvote de idéer du tror på, eller spring over — og giv feedback direkte i kommentarfeltet under hver idé. Alt er offentligt, så de bedste idéer stiger til tops.",
+    },
+    {
+      find: () => document.querySelector<HTMLElement>('aside nav a[href="/ideer"]'),
+      titel: "Din idé er live! 🎉",
+      tekst:
+        "Alle i organisationen kan nu se den. Klik på »Idéer« i sidemenuen for at finde den.",
+      naarKlar: (_nu, _foer, sti) => sti === "/ideer",
+    },
+    {
+      find: () =>
+        nyIdeIdRef.current
+          ? document.querySelector<HTMLElement>(
+              `a[href="/ideer/${nyIdeIdRef.current}"]`,
+            )
+          : null,
+      titel: "Find din idé",
+      tekst:
+        "Der er den — øverst i listen. Klik på titlen for at åbne den.",
+      naarKlar: (_nu, _foer, sti) => sti === `/ideer/${nyIdeIdRef.current}`,
+    },
+    {
+      find: dataTour("ide-stemmer"),
+      titel: "Upvotes og feedback",
+      tekst:
+        "Her tager kollegerne stilling: upvote idéer de tror på, eller spring over — og giv feedback i kommentarfeltet nedenfor. Din egen idé har automatisk din stemme.",
+      manuel: true,
+    },
+
+    // ---------- FASE 2: Stem og kommentér ----------
+    {
+      find: () => document.querySelector<HTMLElement>('aside nav a[href="/ideer"]'),
+      titel: "Nu er det din tur",
+      tekst: "Gå tilbage til »Idéer« i sidemenuen.",
+      naarKlar: (_nu, _foer, sti) => sti === "/ideer",
+    },
+    {
+      find: dataTour("ide-liste"),
+      titel: "Tag stilling",
+      tekst:
+        "Upvote eller spring en af dine kollegers idéer over (pilen til venstre på kortet). Hver handling tæller +1 mod dit næste niveau — se baren ved dit navn øverst.",
+      naarKlar: (nu, foer) =>
+        nu.antalBesluttedeAndres > foer.antalBesluttedeAndres,
+    },
+    {
+      find: dataTour("ide-liste"),
+      titel: "Giv feedback",
+      tekst:
+        "Kommentér direkte fra listen — vi har skrevet et forslag i det øverste felt. Tryk »Send«. Også det giver +1 mod næste niveau.",
+      udfyld: [
+        {
+          selector: 'input[placeholder="Giv konstruktiv feedback…"]',
+          value: "Spændende idé — den vil jeg gerne være med til at teste!",
+        },
+      ],
+      naarKlar: (nu, foer) =>
+        nu.antalMineKommentarer > foer.antalMineKommentarer,
+    },
+    {
+      find: () => document.querySelector<HTMLElement>('aside nav a[href="/"]'),
+      titel: "Dit personlige overblik",
+      tekst: "Klik på »Del din mening« i sidemenuen.",
+      naarKlar: (_nu, _foer, sti) => sti === "/",
+    },
+    {
+      find: dataTour("stemme-ko"),
+      titel: "Aldrig i tvivl om hvad du mangler",
+      tekst:
+        "Denne kø viser kun de idéer, du endnu IKKE har taget stilling til — så du altid nemt kan se, hvad du mangler. Tomt = du er ajour.",
+      manuel: true,
+    },
+
+    // ---------- FASE 3: Lederens perspektiv ----------
+    {
+      rolle: "leder",
+      rute: () => "/overblik",
+      find: dataTour("beslutning"),
+      titel: "Lederens perspektiv 👑",
+      tekst:
+        "Dette er, hvad ledere og administratorer ser: alle åbne idéer sorteret efter opbakning. Herfra træffes den afgørende beslutning — send videre eller afvis. Vi har skiftet dig til leder-rollen.",
+      manuel: true,
+      knap: "Prøv det",
+    },
+    {
+      find: findKnap("Afvis"),
+      titel: "Afvis en idé",
+      tekst:
+        "Prøv først at afvise en idé — klik »Afvis« på et af kortene.",
+      naarKlar: () =>
+        !!document.querySelector(
+          'textarea[placeholder="Forklar kort hvorfor idéen afvises…"]',
+        ),
+    },
+    {
+      find: () => document.querySelector<HTMLElement>(".max-w-lg"),
+      titel: "Altid med en begrundelse",
+      tekst:
+        "En afvisning kræver en begrundelse — den vises på idéen, så medarbejderen aldrig efterlades i tvivl. Vi har skrevet én for dig: tryk »Afvis idé«.",
+      udfyld: [
+        {
+          selector: 'textarea[placeholder="Forklar kort hvorfor idéen afvises…"]',
+          value:
+            "God tanke, men den overlapper med et igangværende initiativ. Vi tager den op igen næste kvartal.",
+        },
+      ],
+      naarKlar: (nu) => nu.antalAfviste > startFoerRef.current.antalAfviste,
+    },
+    {
+      find: findKnap("Send til projekt"),
+      titel: "Send en idé videre 🚀",
+      tekst:
+        "Send nu en anden idé videre til eksekvering — klik »Send til projekt«. Idémageren følger automatisk med som projekt-lead.",
+      naarKlar: (nu) => nu.antalProjekter > startFoerRef.current.antalProjekter,
+      vedFuldfoert: () => {
+        nyProjektIdRef.current = projectsRef.current[0]?.id ?? null;
+        projektStartStatusRef.current = projectsRef.current[0]?.status ?? null;
       },
-      {
-        rute: "/",
-        rolle: "medarbejder",
-        target: "niveau",
-        titel: "Optjen niveauer",
-        tekst:
-          "Hver handling tæller: del en idé, stem, eller kommentér. 5 opgaver = 1 niveau, og dit niveau vises som badge på din avatar — synligt for alle.",
-      },
-      {
-        rute: "/ideer",
-        rolle: "medarbejder",
-        target: "kategori-filtre",
-        titel: "Alle idéer ét sted",
-        tekst:
-          "Under Idéer kan du filtrere på kategori og følge diskussionerne. Afviste idéer forsvinder ikke — de ligger nederst med lederens begrundelse.",
-      },
-      {
-        rute: "/overblik",
-        rolle: "leder",
-        target: "beslutning",
-        titel: "Lederens beslutning",
-        tekst:
-          "Vi har skiftet dig til leder-rollen. På Overblik ser lederen alle åbne idéer sorteret efter opbakning — og beslutter: »Send til projekt« eller »Afvis« med en begrundelse.",
-      },
-      {
-        rute: "/teams",
-        rolle: "leder",
-        target: "board",
-        titel: "Fra idé til eksekvering",
-        tekst:
-          "Godkendte idéer bliver projekter på boardet. Flyt dem gennem stadierne — det sidste trin er mål-linjen, hvor projektet markeres succesfuldt eller ej.",
-      },
-      {
-        rute: foersteProjektId ? `/teams/${foersteProjektId}` : "/teams",
-        rolle: "leder",
-        target: "eksekvering",
-        titel: "Eksekvér i projektet",
-        tekst:
-          "Inde i projektet arbejder teamet med en to-do-liste og en kommentartråd — og idémageren står som lead med fuld credit for idéen.",
-      },
-      {
-        rute: "/leaderboard",
-        rolle: "leder",
-        target: "leaderboard",
-        titel: "Innovation som holdsport",
-        tekst:
-          "Leaderboardet rangerer alle efter niveau, og der er mærker at samle undervejs. Synligheden gør det motiverende at bidrage.",
-      },
-      {
-        rute: "/",
-        rolle: "medarbejder",
-        target: "rolleskift",
-        titel: "Du er klar! 🎉",
-        tekst:
-          "Vi har sat dig tilbage som medarbejder. Du kan når som helst skifte demo-rolle heroppe og se platformen fra leder-perspektivet. God fornøjelse!",
-      },
-    ];
-  }, [projects]);
+    },
+
+    // ---------- FASE 4: Eksekvér projektet ----------
+    {
+      rute: () =>
+        nyProjektIdRef.current ? `/teams/${nyProjektIdRef.current}` : "/teams",
+      find: () =>
+        (document
+          .querySelector<HTMLElement>('input[placeholder="Tilføj en opgave…"]')
+          ?.closest(".rounded-2xl") as HTMLElement | null) ?? null,
+      titel: "Her er dit nye projekt",
+      tekst:
+        "Idéen er nu et projekt med sin egen side. Start eksekveringen: tilføj den første opgave — vi har skrevet den for dig, tryk »Tilføj«.",
+      udfyld: [
+        {
+          selector: 'input[placeholder="Tilføj en opgave…"]',
+          value: "Afklar mål og succeskriterier med teamet",
+        },
+      ],
+      // Det nye projekt fødes uden opgaver, så tjekket kan være absolut.
+      naarKlar: (nu) => nu.antalOpgaver > 0,
+    },
+    {
+      find: () =>
+        (document
+          .querySelector<HTMLElement>('input[placeholder="Skriv en kommentar…"]')
+          ?.closest(".rounded-2xl") as HTMLElement | null) ?? null,
+      titel: "Koordinér i kommentartråden",
+      tekst:
+        "Teamet koordinerer direkte på projektet. Send din første kommentar — tryk »Send«.",
+      udfyld: [
+        {
+          selector: 'input[placeholder="Skriv en kommentar…"]',
+          value: "Jeg indkalder til kickoff i denne uge 🚀",
+        },
+      ],
+      // Det nye projekt fødes uden kommentarer, så tjekket kan være absolut.
+      naarKlar: (nu) => nu.antalProjektKommentarer > 0,
+    },
+    {
+      find: () =>
+        ([...document.querySelectorAll<HTMLElement>("h2")]
+          .find((h) => h.textContent === "Fremgang")
+          ?.closest(".rounded-2xl") as HTMLElement | null) ?? null,
+      titel: "Flyt projektet fremad",
+      tekst:
+        "Projekter bevæger sig gennem stadier frem mod mål-linjen. Prøv: klik på »I gang« for at flytte projektet til næste stadie.",
+      naarKlar: (nu) =>
+        !!nu.projektStatus &&
+        nu.projektStatus !== projektStartStatusRef.current,
+    },
+
+    // ---------- FASE 5: Engagement ----------
+    {
+      rute: () => "/leaderboard",
+      find: dataTour("leaderboard"),
+      titel: "Innovation som holdsport 🏆",
+      tekst:
+        "Alle handlinger tæller mod niveauer, som rangerer leaderboardet — og der er mærker at samle. Synligheden gør det motiverende at bidrage, og lederen kan følge engagementet. Du er nu klar til at udforske Spire på egen hånd!",
+      manuel: true,
+      knap: "Afslut rundvisning",
+    },
+  ]).current;
+
+  const foerRef = useRef<Snapshot>(lavSnapshot());
+  const fuldfoertRef = useRef(false);
 
   const start = useCallback(() => {
-    // Slå leder-landing-redirect fra, så rundvisningen selv styrer navigationen.
     try {
       sessionStorage.setItem("spire.landet", "1");
     } catch {
       // ignorér
     }
+    nyIdeIdRef.current = null;
+    nyProjektIdRef.current = null;
+    projektStartStatusRef.current = null;
+    const s = lavSnapshot();
+    startFoerRef.current = {
+      antalIdeer: s.antalIdeer,
+      antalAfviste: s.antalAfviste,
+      antalProjekter: s.antalProjekter,
+    };
     setTrin(0);
     setAktiv(true);
-  }, []);
+  }, [lavSnapshot]);
 
   const slut = useCallback(() => {
     try {
@@ -157,7 +393,15 @@ export function Rundvisning() {
     setAktiv(false);
     setRect(null);
     if (rolleRef.current !== "medarbejder") saetRolle("medarbejder");
-  }, [saetRolle]);
+    router.push("/");
+  }, [saetRolle, router]);
+
+  const videre = useCallback(() => {
+    setTrin((t) => {
+      if (t >= trinListe.length - 1) return t;
+      return t + 1;
+    });
+  }, [trinListe]);
 
   // Auto-start for gæster, der ikke har set rundvisningen endnu.
   useEffect(() => {
@@ -170,55 +414,76 @@ export function Rundvisning() {
     start();
   }, [gaest, aktiv, start]);
 
-  // Manuel (gen)start via event — bruges af "Se rundvisningen"-knappen.
+  // Manuel (gen)start via event — "Se rundvisningen"-knappen i sidemenuen.
   useEffect(() => {
     const handler = () => start();
     window.addEventListener(RUNDVISNING_EVENT, handler);
     return () => window.removeEventListener(RUNDVISNING_EVENT, handler);
   }, [start]);
 
-  // Pr. trin: skift rolle/side, find target-elementet og følg dets position.
+  // Kør det aktive trin: rolle/navigation, spotlight-tracking, udfyldning og fuldførelses-tjek.
   useEffect(() => {
     if (!aktiv) return;
     const s = trinListe[trin];
     if (!s) return;
 
-    if (rolleRef.current !== s.rolle) saetRolle(s.rolle);
-    router.push(s.rute);
+    if (s.rolle && rolleRef.current !== s.rolle) saetRolle(s.rolle);
+    if (s.rute) router.push(s.rute());
+
+    foerRef.current = lavSnapshot();
+    fuldfoertRef.current = false;
     setRect(null);
 
     let element: HTMLElement | null = null;
-    const opdater = () => {
-      if (!element || !element.isConnected) return;
-      const r = element.getBoundingClientRect();
-      setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
-    };
+    let scrollet = false;
+    let udfyldt = false;
 
-    const startTid = Date.now();
-    const poll = setInterval(() => {
-      element = document.querySelector<HTMLElement>(
-        `[data-tour="${s.target}"]`,
-      );
-      if (element) {
-        clearInterval(poll);
-        element.scrollIntoView({ block: "center", behavior: "smooth" });
-        opdater();
-      } else if (Date.now() - startTid > 3500) {
-        clearInterval(poll); // target findes ikke (fx skjult på mobil) — vis kun kortet
+    const tick = () => {
+      // 1) Find + følg elementet
+      const fundet = s.find();
+      if (fundet !== element) {
+        element = fundet;
+        scrollet = false;
       }
-    }, 120);
+      if (element && element.isConnected) {
+        if (!scrollet) {
+          element.scrollIntoView({ block: "center", behavior: "smooth" });
+          scrollet = true;
+        }
+        const r = element.getBoundingClientRect();
+        setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+      } else {
+        setRect(null);
+      }
 
-    // Følg med under smooth-scroll, resize og layout-skift.
-    const tracker = setInterval(opdater, 250);
-    window.addEventListener("scroll", opdater, true);
-    window.addEventListener("resize", opdater);
-    return () => {
-      clearInterval(poll);
-      clearInterval(tracker);
-      window.removeEventListener("scroll", opdater, true);
-      window.removeEventListener("resize", opdater);
+      // 2) Udfyld eksempeltekster (én gang, når alle felter findes)
+      if (s.udfyld && !udfyldt) {
+        const felter = s.udfyld.map((u) => ({
+          el: document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+            u.selector,
+          ),
+          value: u.value,
+        }));
+        if (felter.every((f) => f.el)) {
+          felter.forEach((f) => udfyldFelt(f.el!, f.value));
+          udfyldt = true;
+        }
+      }
+
+      // 3) Er handlingen udført?
+      if (s.naarKlar && !fuldfoertRef.current) {
+        if (s.naarKlar(lavSnapshot(), foerRef.current, pathnameRef.current)) {
+          fuldfoertRef.current = true;
+          s.vedFuldfoert?.();
+          setTrin((t) => Math.min(t + 1, trinListe.length - 1));
+        }
+      }
     };
-  }, [aktiv, trin, trinListe, router, saetRolle]);
+
+    tick();
+    const interval = setInterval(tick, 200);
+    return () => clearInterval(interval);
+  }, [aktiv, trin, trinListe, router, saetRolle, lavSnapshot]);
 
   if (!mounted || !aktiv) return null;
   const s = trinListe[trin];
@@ -226,23 +491,27 @@ export function Rundvisning() {
 
   return createPortal(
     <div className="pointer-events-none fixed inset-0 z-[70]">
-      {/* Blød fremhævnings-ring om det aktuelle element */}
-      {rect && (
+      {/* Mørkt bagtæppe med spotlight-hul over fokus-elementet */}
+      {rect ? (
         <div
-          className="absolute rounded-2xl ring-4 ring-brand-500/60 shadow-[0_0_0_8px_rgba(99,102,241,0.12)] transition-all duration-300"
+          className="absolute rounded-2xl transition-all duration-300"
           style={{
-            top: rect.top - 6,
-            left: rect.left - 6,
-            width: rect.width + 12,
-            height: rect.height + 12,
+            top: rect.top - 8,
+            left: rect.left - 8,
+            width: rect.width + 16,
+            height: rect.height + 16,
+            boxShadow:
+              "0 0 0 3px rgba(129,140,248,0.9), 0 0 0 9999px rgba(15,23,42,0.6)",
           }}
         />
+      ) : (
+        <div className="absolute inset-0 bg-slate-900/60" />
       )}
 
       {/* Trin-kort */}
       <div
         key={trin}
-        className="pointer-events-auto fixed bottom-5 left-4 right-4 animate-fade-in rounded-2xl bg-white p-5 shadow-2xl ring-1 ring-slate-200 sm:left-auto sm:right-6 sm:w-96"
+        className="pointer-events-auto fixed bottom-5 left-4 right-4 animate-fade-in rounded-2xl bg-white p-5 shadow-2xl ring-1 ring-slate-200 sm:left-auto sm:right-6 sm:w-[24rem]"
       >
         <div className="mb-2 flex items-center justify-between gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-brand-600">
@@ -260,16 +529,12 @@ export function Rundvisning() {
         <h3 className="font-semibold">{s.titel}</h3>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">{s.tekst}</p>
 
-        {/* Fremdriftsprikker */}
-        <div className="mt-3 flex gap-1.5">
-          {trinListe.map((_, i) => (
-            <span
-              key={i}
-              className={`h-1.5 rounded-full transition-all ${
-                i === trin ? "w-5 bg-brand-500" : "w-1.5 bg-slate-200"
-              }`}
-            />
-          ))}
+        {/* Fremdriftsbar */}
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-brand-500 to-accent-500 transition-all duration-500"
+            style={{ width: `${((trin + 1) / trinListe.length) * 100}%` }}
+          />
         </div>
 
         <div className="mt-4 flex items-center justify-between gap-2">
@@ -279,24 +544,18 @@ export function Rundvisning() {
           >
             Spring over
           </button>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => setTrin((t) => Math.max(0, t - 1))}
-              disabled={trin === 0}
-            >
-              <ArrowLeft size={14} /> Forrige
+          {s.manuel ? (
+            <Button onClick={sidste ? slut : videre}>
+              {sidste ? <Check size={14} /> : null}
+              {s.knap ?? "Videre"}
+              {sidste ? null : <ArrowRight size={14} />}
             </Button>
-            {sidste ? (
-              <Button onClick={slut}>
-                <Check size={14} /> Afslut
-              </Button>
-            ) : (
-              <Button onClick={() => setTrin((t) => t + 1)}>
-                Næste <ArrowRight size={14} />
-              </Button>
-            )}
-          </div>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700">
+              <MousePointerClick size={13} className="animate-pulse" />
+              Din tur — følg instruktionen
+            </span>
+          )}
         </div>
       </div>
     </div>,
